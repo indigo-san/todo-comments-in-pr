@@ -25024,21 +25024,46 @@ async function run() {
 /***/ }),
 
 /***/ 6652:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.outputDiff = outputDiff;
 const node_child_process_1 = __nccwpck_require__(7718);
-const node_util_1 = __importDefault(__nccwpck_require__(7261));
-const execAsync = node_util_1.default.promisify(node_child_process_1.exec);
+async function runGit(args) {
+    return await new Promise((resolve, reject) => {
+        const child = (0, node_child_process_1.spawn)('git', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        const stdoutChunks = [];
+        const stderrChunks = [];
+        child.stdout.on('data', (chunk) => {
+            stdoutChunks.push(chunk);
+        });
+        child.stderr.on('data', (chunk) => {
+            stderrChunks.push(chunk);
+        });
+        child.on('error', reject);
+        child.on('close', (code, signal) => {
+            const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+            const stderr = Buffer.concat(stderrChunks).toString('utf8');
+            if (code === 0) {
+                resolve({ stdout, stderr });
+                return;
+            }
+            reject(new Error(`git ${args.join(' ')} failed with ${signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`}: ${stderr || stdout}`));
+        });
+    });
+}
 async function outputDiff(path, commit) {
-    await execAsync(`git fetch origin ${commit}`);
-    const { stdout } = await execAsync(`git diff origin/${commit} -U0 --diff-filter=AM -- ${path.map(s => `'${s}'`).join(' ')}`);
+    await runGit(['fetch', 'origin', commit]);
+    const { stdout } = await runGit([
+        'diff',
+        `origin/${commit}`,
+        '-U0',
+        '--diff-filter=AM',
+        '--',
+        ...path
+    ]);
     return stdout;
 }
 
